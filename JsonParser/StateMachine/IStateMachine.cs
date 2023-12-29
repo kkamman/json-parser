@@ -1,10 +1,13 @@
 ﻿namespace JsonParser.StateMachine;
 
-public interface IStateMachine<TState, TStep, TSelf>
-    where TSelf : IStateMachine<TState, TStep, TSelf>
+public interface IStateMachine<TStep>
+{
+    public StateMachineResult Result { get; }
+    public void Step(TStep value);
+    public void Reset();
+}
+
+public interface IStateMachine<TStep, TState> : IStateMachine<TStep>
 {
     public TState State { get; }
-    public StateMachineResult Result { get; }
-    public TSelf Step(TStep value);
-    public TSelf Reset();
 }

@@ -5,75 +5,91 @@ namespace JsonParser.Lexer;
 public enum JsonTokenMatcherState
 {
     Start,
+    NoMatch,
     True,
     Null,
     False,
+    BeginObject,
+    BeginArray,
+    EndObject,
+    EndArray,
+    NameSeparator,
+    ValueSeparator,
+    String,
+    Number
 }
 
-public class JsonTokenMatcher : IStateMachine<JsonTokenMatcherState, char, JsonTokenMatcher>
+public class JsonTokenMatcher : IStateMachine<char, JsonTokenMatcherState>
 {
-    private readonly IReadOnlyDictionary<JsonTokenMatcherState, LiteralNameMatcher> _literalNameMatchersByState =
-        new Dictionary<JsonTokenMatcherState, LiteralNameMatcher>
+    private readonly IReadOnlyDictionary<JsonTokenMatcherState, IStateMachine<char>> _submachinesByState =
+        new Dictionary<JsonTokenMatcherState, IStateMachine<char>>
         {
-            { JsonTokenMatcherState.True, new("true") },
-            { JsonTokenMatcherState.Null, new("null") },
-            { JsonTokenMatcherState.False, new("false") }
+            { JsonTokenMatcherState.True, new LiteralNameMatcher("true") },
+            { JsonTokenMatcherState.Null, new LiteralNameMatcher("null") },
+            { JsonTokenMatcherState.False, new LiteralNameMatcher("false") }
         };
+
+    private IStateMachine<char>? _currentSubmachine = null;
 
     public StateMachineResult Result => State switch
     {
         JsonTokenMatcherState.Start => StateMachineResult.Processing,
-        JsonTokenMatcherState.True => _literalNameMatchersByState[State].Result,
-        JsonTokenMatcherState.Null => _literalNameMatchersByState[State].Result,
-        JsonTokenMatcherState.False => _literalNameMatchersByState[State].Result,
+        JsonTokenMatcherState.NoMatch => StateMachineResult.Rejected,
+        JsonTokenMatcherState.BeginObject => StateMachineResult.Accepted,
+        JsonTokenMatcherState.BeginArray => StateMachineResult.Accepted,
+        JsonTokenMatcherState.EndObject => StateMachineResult.Accepted,
+        JsonTokenMatcherState.EndArray => StateMachineResult.Accepted,
+        JsonTokenMatcherState.NameSeparator => StateMachineResult.Accepted,
+        JsonTokenMatcherState.ValueSeparator => StateMachineResult.Accepted,
+        _ when _currentSubmachine is not null => _currentSubmachine.Result,
         _ => throw new NotImplementedException(),
     };
 
     public JsonTokenMatcherState State { get; private set; } = JsonTokenMatcherState.Start;
 
-    public JsonTokenMatcher Step(char character)
+    public void Step(char character)
     {
-        State = State switch
+        if (State != JsonTokenMatcherState.String && char.IsWhiteSpace(character))
         {
-            JsonTokenMatcherState.Start => character switch
-            {
-                't' or 'n' or 'f' => StepLiteralName(character),
-                _ => throw new NotImplementedException(),
-            },
-            JsonTokenMatcherState.True => StepLiteralName(character),
-            JsonTokenMatcherState.Null => StepLiteralName(character),
-            JsonTokenMatcherState.False => StepLiteralName(character),
-            _ => throw new NotImplementedException(),
-        };
-        return this;
-    }
+            return;
+        }
 
-    private JsonTokenMatcherState StepLiteralName(char character)
-    {
-        var nextState = State switch
+        if (State == JsonTokenMatcherState.Start)
         {
-            JsonTokenMatcherState.Start => character switch
+            MoveToState(character switch
             {
                 't' => JsonTokenMatcherState.True,
                 'n' => JsonTokenMatcherState.Null,
                 'f' => JsonTokenMatcherState.False,
-                _ => throw new InvalidOperationException()
-            },
-            _ => State
-        };
+                '{' => JsonTokenMatcherState.BeginObject,
+                '[' => JsonTokenMatcherState.BeginArray,
+                '}' => JsonTokenMatcherState.EndObject,
+                ']' => JsonTokenMatcherState.EndArray,
+                ':' => JsonTokenMatcherState.NameSeparator,
+                ',' => JsonTokenMatcherState.ValueSeparator,
+                '-' or (>= '1' and <= '9') => JsonTokenMatcherState.Number,
+                '\"' => JsonTokenMatcherState.String,
+                _ => JsonTokenMatcherState.NoMatch
+            });
+        }
 
-        _literalNameMatchersByState[nextState].Step(character);
-
-        return nextState;
+        _currentSubmachine?.Step(character);
     }
 
-    public JsonTokenMatcher Reset()
+    private void MoveToState(JsonTokenMatcherState nextState)
+    {
+        State = nextState;
+        _currentSubmachine = _submachinesByState
+            .TryGetValue(nextState, out var submachine)
+            ? submachine : null;
+    }
+
+    public void Reset()
     {
         State = JsonTokenMatcherState.Start;
-        foreach (var matcher in _literalNameMatchersByState.Values)
+        foreach (var matcher in _submachinesByState.Values)
         {
             matcher.Reset();
         }
-        return this;
     }
 }

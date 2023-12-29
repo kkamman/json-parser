@@ -15,6 +15,7 @@ public class JsonLexer : IJsonLexer
             if (jsonTokenMatcher.Result == StateMachineResult.Accepted)
             {
                 yield return lexeme;
+                jsonTokenMatcher.Reset();
             }
             else if (jsonTokenMatcher.Result == StateMachineResult.Rejected)
             {

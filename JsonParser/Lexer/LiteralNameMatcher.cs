@@ -2,18 +2,17 @@
 
 namespace JsonParser.Lexer;
 
-public class LiteralNameMatcher : IStateMachine<int, char, LiteralNameMatcher>
+public class LiteralNameMatcher : IStateMachine<char, int>
 {
     private readonly string _literalName;
+    private const int NO_MATCH_STATE = -1;
 
     public int State { get; private set; }
 
     public StateMachineResult Result => State switch
     {
-        -1 => StateMachineResult.Rejected,
-        _ => State < _literalName.Length ?
-            StateMachineResult.Processing :
-            StateMachineResult.Accepted
+        NO_MATCH_STATE => StateMachineResult.Rejected,
+        _ => State < _literalName.Length ? StateMachineResult.Processing : StateMachineResult.Accepted
     };
 
     public LiteralNameMatcher(string literalName)
@@ -21,7 +20,7 @@ public class LiteralNameMatcher : IStateMachine<int, char, LiteralNameMatcher>
         _literalName = literalName;
     }
 
-    public LiteralNameMatcher Step(char character)
+    public void Step(char character)
     {
         if (Result == StateMachineResult.Processing
             && character == _literalName[State])
@@ -30,14 +29,12 @@ public class LiteralNameMatcher : IStateMachine<int, char, LiteralNameMatcher>
         }
         else
         {
-            State = -1;
+            State = NO_MATCH_STATE;
         }
-        return this;
     }
 
-    public LiteralNameMatcher Reset()
+    public void Reset()
     {
         State = 0;
-        return this;
     }
 }
