@@ -26,10 +26,12 @@ public class JsonTokenMatcher : IStateMachine<char, JsonTokenMatcherState>
         {
             { JsonTokenMatcherState.True, new LiteralNameMatcher("true") },
             { JsonTokenMatcherState.Null, new LiteralNameMatcher("null") },
-            { JsonTokenMatcherState.False, new LiteralNameMatcher("false") }
+            { JsonTokenMatcherState.False, new LiteralNameMatcher("false") },
+            { JsonTokenMatcherState.String, new JsonStringMatcher() },
+            { JsonTokenMatcherState.Number, new JsonNumberMatcher() },
         };
 
-    private IStateMachine<char>? _currentSubmachine = null;
+    private IStateMachine<char>? _submachine = null;
 
     public StateMachineResult Result => State switch
     {
@@ -41,7 +43,7 @@ public class JsonTokenMatcher : IStateMachine<char, JsonTokenMatcherState>
         JsonTokenMatcherState.EndArray => StateMachineResult.Accepted,
         JsonTokenMatcherState.NameSeparator => StateMachineResult.Accepted,
         JsonTokenMatcherState.ValueSeparator => StateMachineResult.Accepted,
-        _ when _currentSubmachine is not null => _currentSubmachine.Result,
+        _ when _submachine is not null => _submachine.Result,
         _ => throw new NotImplementedException(),
     };
 
@@ -49,11 +51,6 @@ public class JsonTokenMatcher : IStateMachine<char, JsonTokenMatcherState>
 
     public void Step(char character)
     {
-        if (State != JsonTokenMatcherState.String && char.IsWhiteSpace(character))
-        {
-            return;
-        }
-
         if (State == JsonTokenMatcherState.Start)
         {
             MoveToState(character switch
@@ -67,29 +64,29 @@ public class JsonTokenMatcher : IStateMachine<char, JsonTokenMatcherState>
                 ']' => JsonTokenMatcherState.EndArray,
                 ':' => JsonTokenMatcherState.NameSeparator,
                 ',' => JsonTokenMatcherState.ValueSeparator,
-                '-' or (>= '1' and <= '9') => JsonTokenMatcherState.Number,
+                '-' or (>= '0' and <= '9') => JsonTokenMatcherState.Number,
                 '\"' => JsonTokenMatcherState.String,
                 _ => JsonTokenMatcherState.NoMatch
             });
         }
+        else if (_submachine is null)
+        {
+            State = JsonTokenMatcherState.NoMatch;
+        }
 
-        _currentSubmachine?.Step(character);
+        _submachine?.Step(character);
     }
 
     private void MoveToState(JsonTokenMatcherState nextState)
     {
         State = nextState;
-        _currentSubmachine = _submachinesByState
-            .TryGetValue(nextState, out var submachine)
-            ? submachine : null;
+        _submachine ??= _submachinesByState.GetValueOrDefault(nextState);
     }
 
     public void Reset()
     {
         State = JsonTokenMatcherState.Start;
-        foreach (var matcher in _submachinesByState.Values)
-        {
-            matcher.Reset();
-        }
+        _submachine?.Reset();
+        _submachine = null;
     }
 }

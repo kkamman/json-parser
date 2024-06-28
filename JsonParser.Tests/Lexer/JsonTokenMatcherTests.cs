@@ -40,6 +40,8 @@ public class JsonTokenMatcherTests
             Add("]", StateMachineResult.Accepted, JsonTokenMatcherState.EndArray);
             Add(":", StateMachineResult.Accepted, JsonTokenMatcherState.NameSeparator);
             Add(",", StateMachineResult.Accepted, JsonTokenMatcherState.ValueSeparator);
+            Add("\" abc 123 \"", StateMachineResult.Accepted, JsonTokenMatcherState.String);
+            Add("\"\"", StateMachineResult.Accepted, JsonTokenMatcherState.String);
         }
     }
 }

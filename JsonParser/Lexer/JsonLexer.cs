@@ -10,17 +10,39 @@ public class JsonLexer : IJsonLexer
         var lexeme = string.Empty;
         foreach (var character in json)
         {
-            lexeme += character;
-            jsonTokenMatcher.Step(character);
-            if (jsonTokenMatcher.Result == StateMachineResult.Accepted)
+            if (lexeme == string.Empty && char.IsWhiteSpace(character))
             {
-                yield return lexeme;
-                jsonTokenMatcher.Reset();
+                continue;
             }
-            else if (jsonTokenMatcher.Result == StateMachineResult.Rejected)
+
+            var resultBeforeStep = jsonTokenMatcher.Result;
+
+            if (resultBeforeStep is StateMachineResult.Rejected)
             {
                 throw new InvalidOperationException();
             }
+
+            jsonTokenMatcher.Step(character);
+
+            if (resultBeforeStep is StateMachineResult.Accepted
+                && jsonTokenMatcher.Result is StateMachineResult.Rejected)
+            {
+                yield return lexeme;
+                lexeme = string.Empty;
+                jsonTokenMatcher.Reset();
+            }
+
+            if (!char.IsWhiteSpace(character))
+            {
+                lexeme += character;
+            }
+        }
+
+        if (lexeme != string.Empty)
+        {
+            yield return jsonTokenMatcher.Result is StateMachineResult.Accepted
+                ? lexeme
+                : throw new InvalidOperationException();
         }
     }
 }
